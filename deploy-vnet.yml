@@ -1,1 +1,57 @@
 
+
+name: Deploy Azure Virtual Network
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'main.bicep'
+      - '.github/workflows/deploy-vnet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sign in to Azure using OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check Azure subscription
+        run: az account show --output table
+
+      - name: Validate Bicep deployment
+        run: |
+          az deployment group validate \
+            --resource-group rg-github-vnet-demo \
+            --template-file main.bicep \
+            --parameters location=eastus
+
+      - name: Deploy Virtual Network
+        run: |
+          az deployment group create \
+            --name "vnet-deployment-${GITHUB_RUN_NUMBER}" \
+            --resource-group rg-github-vnet-demo \
+            --template-file main.bicep \
+            --parameters location=eastus
+
+      - name: Verify Virtual Network
+        run: |
+          az network vnet show \
+            --resource-group rg-github-vnet-demo \
+            --name vnet-github-demo \
+            --query "{name:name, location:location, addressSpace:addressSpace.addressPrefixes, subnets:subnets[].name}" \
+            --output json
